@@ -20,7 +20,7 @@ Please stay vigilant and **protect your personal privacy**!
 We are using the Weblate platform to translate Zalith Launcher 2. You're welcome to join our [Weblate project](https://hosted.weblate.org/projects/zalithlauncher2) and contribute to the translations!  
 Thank you to every language contributor for helping make Zalith Launcher 2 more multilingual and global!
 
-## 👨‍💻 Developer
+## 👨‍💻 Developer 
 
 This project is currently being developed solely by [@MovTery](https://github.com/MovTery).
 Feedback, suggestions, and issue reports are very welcome. As it's a personal project, development may take time—thank you for your patience!
