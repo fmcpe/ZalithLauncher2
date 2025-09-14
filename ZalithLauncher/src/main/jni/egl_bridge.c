@@ -147,7 +147,7 @@ int pojavInitOpenGL() {
         setenv("MESA_GL_VERSION_OVERRIDE", "4.6", 1);
         setenv("MESA_GLSL_VERSION_OVERRIDE", "460", 1);
         setenv("MESA_GL_PROFILE_OVERRIDE", "core", 1);
-        setenv("MESA_GLTHREAD", 1, true);
+        setenv("MESA_GLTHREAD", "true", 1);
         setenv("vblank_mode", "0", 1);
         setenv("FD_MESA_DEBUG", "nobin,norobustness", 1);
         setenv("FD_DEBUG", "nopowersave", 1);
