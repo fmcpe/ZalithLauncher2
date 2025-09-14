@@ -147,9 +147,9 @@ int pojavInitOpenGL() {
         setenv("OSMESA_NO_FLUSH_FRONTBUFFER", "1", false);
         setenv("MESA_GL_VERSION_OVERRIDE", "4.6", 1);
         setenv("MESA_GLSL_VERSION_OVERRIDE", "460", 1);
-        setenv("MESA_GL_PROFILE_OVERRIDE", "core", 1)
+        setenv("MESA_GL_PROFILE_OVERRIDE", "core", 1);
         if (!strcmp(getenv("OSMESA_NO_FLUSH_FRONTBUFFER"), "1"))
-            printf("VirGL: OSMesa buffer flush is DISABLED!\n");
+            printf("Freedreno: OSMesa buffer flush is DISABLED!\n");
         set_osm_bridge_tbl();
     }
 
