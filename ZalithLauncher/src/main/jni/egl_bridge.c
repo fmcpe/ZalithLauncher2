@@ -146,6 +146,8 @@ int pojavInitOpenGL() {
         setenv("GALLIUM_DRIVER", "freedreno", 1);
         setenv("MESA_GL_VERSION_OVERRIDE", "4.6", 1);
         setenv("MESA_GLSL_VERSION_OVERRIDE", "460", 1);
+        setenv("MESA_GLTHREAD", "1", 1);
+        setenv("vblank_mode", "0", 1);
         set_osm_bridge_tbl();
     }
 
