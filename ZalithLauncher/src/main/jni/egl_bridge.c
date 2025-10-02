@@ -141,7 +141,7 @@ int pojavInitOpenGL() {
 
     if (!strcmp(renderer, "gallium_freedreno"))
     {
-        pojav_environ->config_renderer = RENDERER_VK_ZINK;
+        pojav_environ->config_renderer = RENDERER_GL4ES;
         setenv("MESA_LOADER_DRIVER_OVERRIDE", "kgsl", 1);
         setenv("GALLIUM_DRIVER", "freedreno", 1);
         setenv("MESA_GL_VERSION_OVERRIDE", "4.6", 1);
