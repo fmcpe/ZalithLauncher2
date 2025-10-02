@@ -10,7 +10,7 @@ import com.movtery.zalithlauncher.game.account.auth_server.data.AuthServerDao
 import com.movtery.zalithlauncher.setting.AllSettings
 import com.movtery.zalithlauncher.utils.logging.Logger.lError
 import com.movtery.zalithlauncher.utils.logging.Logger.lInfo
-import com.movtery.zalithlauncher.utils.network.NetWorkUtils
+import com.movtery.zalithlauncher.utils.network.isNetworkAvailable
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -135,7 +135,7 @@ object AccountsManager {
         account: Account,
         onFailed: (th: Throwable) -> Unit = {},
     ) {
-        if (NetWorkUtils.isNetworkAvailable(context)) {
+        if (isNetworkAvailable(context)) {
             performLogin(
                 context = context,
                 account = account,
@@ -235,8 +235,11 @@ object AccountsManager {
     /**
      * 通过账号的profileId读取账号
      */
-    fun loadFromProfileID(profileId: String): Account? =
-        _accounts.find { it.profileId == profileId }
+    fun loadFromProfileID(
+        profileId: String,
+        accountType: String? = null
+    ): Account? =
+        _accounts.find { it.profileId == profileId && it.accountType == accountType }
 
     /**
      * 账号是否存在

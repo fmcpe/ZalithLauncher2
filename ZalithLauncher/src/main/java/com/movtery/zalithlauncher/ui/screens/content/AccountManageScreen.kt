@@ -1,7 +1,6 @@
 package com.movtery.zalithlauncher.ui.screens.content
 
 import android.content.Context
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -21,15 +20,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Checkroom
-import androidx.compose.material.icons.outlined.Dns
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,18 +60,19 @@ import com.movtery.zalithlauncher.game.account.microsoft.NotPurchasedMinecraftEx
 import com.movtery.zalithlauncher.game.account.microsoft.XboxLoginException
 import com.movtery.zalithlauncher.game.account.microsoft.toLocal
 import com.movtery.zalithlauncher.game.account.microsoftLogin
+import com.movtery.zalithlauncher.game.account.refreshMicrosoft
 import com.movtery.zalithlauncher.game.account.wardrobe.EmptyCape
 import com.movtery.zalithlauncher.game.account.wardrobe.SkinModelType
 import com.movtery.zalithlauncher.game.account.wardrobe.capeTranslatedName
 import com.movtery.zalithlauncher.game.account.wardrobe.getLocalUUIDWithSkinModel
+import com.movtery.zalithlauncher.game.account.wardrobe.validateSkinFile
 import com.movtery.zalithlauncher.game.account.yggdrasil.changeCape
+import com.movtery.zalithlauncher.game.account.yggdrasil.executeWithAuthorization
 import com.movtery.zalithlauncher.game.account.yggdrasil.getPlayerProfile
+import com.movtery.zalithlauncher.game.account.yggdrasil.isUsing
 import com.movtery.zalithlauncher.game.account.yggdrasil.uploadSkin
-import com.movtery.zalithlauncher.game.download.assets.platform.Platform
-import com.movtery.zalithlauncher.game.download.assets.platform.PlatformClasses
 import com.movtery.zalithlauncher.path.PathManager
 import com.movtery.zalithlauncher.ui.base.BaseScreen
-import com.movtery.zalithlauncher.ui.components.IconTextButton
 import com.movtery.zalithlauncher.ui.components.MarqueeText
 import com.movtery.zalithlauncher.ui.components.ScalingActionButton
 import com.movtery.zalithlauncher.ui.components.ScalingLabel
@@ -101,7 +97,7 @@ import com.movtery.zalithlauncher.ui.screens.content.elements.ServerItem
 import com.movtery.zalithlauncher.ui.screens.content.elements.ServerOperation
 import com.movtery.zalithlauncher.utils.animation.swapAnimateDpAsState
 import com.movtery.zalithlauncher.utils.logging.Logger.lError
-import com.movtery.zalithlauncher.utils.string.StringUtils.Companion.getMessageOrToString
+import com.movtery.zalithlauncher.utils.string.getMessageOrToString
 import com.movtery.zalithlauncher.viewmodel.ErrorViewModel
 import com.movtery.zalithlauncher.viewmodel.ScreenBackStackViewModel
 import io.ktor.client.call.body
@@ -124,7 +120,7 @@ fun AccountManageScreen(
     backStackViewModel: ScreenBackStackViewModel,
     backToMainScreen: () -> Unit,
     openLink: (url: String) -> Unit,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit
 ) {
     var microsoftLoginOperation by remember { mutableStateOf<MicrosoftLoginOperation>(MicrosoftLoginOperation.None) }
     var microsoftChangeSkinOperation by remember { mutableStateOf<MicrosoftChangeSkinOperation>(MicrosoftChangeSkinOperation.None) }
@@ -157,20 +153,7 @@ fun AccountManageScreen(
                     .fillMaxHeight()
                     .padding(top = 12.dp, end = 12.dp, bottom = 12.dp)
                     .weight(7.5f),
-                summitError = summitError,
-                onAddAuthClicked = {
-                    //打开添加认证服务器的对话框
-                    serverOperation = ServerOperation.AddNew
-                },
-                swapToDownloadScreen = { projectId, platform, classes ->
-                    backStackViewModel.navigateToDownload(
-                        targetScreen = backStackViewModel.downloadModScreen.apply {
-                            navigateTo(
-                                NormalNavKey.DownloadAssets(platform, projectId, classes)
-                            )
-                        }
-                    )
-                },
+                submitError = submitError,
                 onMicrosoftChangeSkin = { account, result ->
                     microsoftChangeSkinOperation = MicrosoftChangeSkinOperation.ImportFile(account, result)
                 },
@@ -193,21 +176,21 @@ fun AccountManageScreen(
         microsoftLoginOperation = microsoftLoginOperation,
         updateOperation = { microsoftLoginOperation = it },
         openLink = openLink,
-        summitError = summitError
+        submitError = submitError
     )
 
     //微软账号更改皮肤操作逻辑
     MicrosoftChangeSkinOperation(
         operation = microsoftChangeSkinOperation,
         updateOperation = { microsoftChangeSkinOperation = it },
-        summitError = summitError
+        submitError = submitError
     )
 
     //微软账号更改披风操作逻辑
     MicrosoftChangeCapeOperation(
         operation = microsoftChangeCapeOperation,
         updateOperation = { microsoftChangeCapeOperation = it },
-        summitError = summitError
+        submitError = submitError
     )
 
     //离线账号操作逻辑
@@ -221,7 +204,7 @@ fun AccountManageScreen(
     OtherLoginOperation(
         otherLoginOperation = otherLoginOperation,
         updateOperation = { otherLoginOperation = it },
-        summitError = summitError,
+        submitError = submitError,
         openLink = openLink
     )
 
@@ -229,7 +212,7 @@ fun AccountManageScreen(
     ServerTypeOperation(
         serverOperation = serverOperation,
         updateServerOperation = { serverOperation = it },
-        summitError = summitError
+        submitError = submitError
     )
 }
 
@@ -314,7 +297,7 @@ private fun MicrosoftLoginOperation(
     microsoftLoginOperation: MicrosoftLoginOperation,
     updateOperation: (MicrosoftLoginOperation) -> Unit,
     openLink: (url: String) -> Unit,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit
 ) {
     val context = LocalContext.current
 
@@ -334,7 +317,7 @@ private fun MicrosoftLoginOperation(
                 backToMain = backToMainScreen,
                 checkIfInWebScreen = checkIfInWebScreen,
                 updateOperation = { updateOperation(it) },
-                summitError = summitError
+                submitError = submitError
             )
             updateOperation(MicrosoftLoginOperation.None)
         }
@@ -345,7 +328,7 @@ private fun MicrosoftLoginOperation(
 private fun MicrosoftChangeSkinOperation(
     operation: MicrosoftChangeSkinOperation,
     updateOperation: (MicrosoftChangeSkinOperation) -> Unit,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit
 ) {
     val context = LocalContext.current
     when (operation) {
@@ -363,18 +346,11 @@ private fun MicrosoftChangeSkinOperation(
                 task = {
                     context.copyLocalFile(uri, cacheFile)
                     //导入成功后，检查图片文件像素尺寸
-                    val options = BitmapFactory.Options()
-                    options.inJustDecodeBounds = true
-                    BitmapFactory.decodeFile(cacheFile.absolutePath, options)
-
-                    val width = options.outWidth
-                    val height = options.outHeight
-                    if ((width == 64 && height == 32) || (width == 64 && height == 64)) {
-                        //像素尺寸满足 64x64 或 32x32
+                    if (validateSkinFile(cacheFile)) {
                         updateOperation(MicrosoftChangeSkinOperation.SelectSkinModel(account, cacheFile))
                     } else {
                         //像素尺寸不符合要求
-                        summitError(
+                        submitError(
                             ErrorViewModel.ThrowableMessage(
                                 title = context.getString(R.string.generic_warning),
                                 message = context.getString(R.string.account_change_skin_invalid)
@@ -384,7 +360,7 @@ private fun MicrosoftChangeSkinOperation(
                     }
                 },
                 onError = { th ->
-                    summitError(
+                    submitError(
                         ErrorViewModel.ThrowableMessage(
                             title = context.getString(R.string.generic_error),
                             message = context.getString(R.string.account_change_skin_failed_to_import) + "\r\n" + th.getMessageOrToString()
@@ -423,22 +399,29 @@ private fun MicrosoftChangeSkinOperation(
             val skinModel = operation.skinModel
 
             val task = Task.runTask(
-                id = account.uniqueUUID,
                 dispatcher = Dispatchers.IO,
                 task = { task ->
-                    task.updateMessage(R.string.account_change_skin_uploading)
-                    uploadSkin(
-                        apiUrl = MINECRAFT_SERVICES_URL,
-                        accessToken = account.accessToken,
-                        file = skinFile,
-                        modelType = skinModel
+                    executeWithAuthorization(
+                        block = {
+                            task.updateProgress(-1f, R.string.account_change_skin_uploading)
+                            uploadSkin(
+                                apiUrl = MINECRAFT_SERVICES_URL,
+                                accessToken = account.accessToken,
+                                file = skinFile,
+                                modelType = skinModel
+                            )
+                        },
+                        onRefreshRequest = {
+                            account.refreshMicrosoft(task = task, coroutineContext = coroutineContext)
+                            AccountsManager.suspendSaveAccount(account)
+                        }
                     )
                     //刷新本地皮肤
                     task.updateMessage(R.string.account_change_skin_update_local)
                     runCatching {
                         account.downloadSkin()
                     }.onFailure { th ->
-                        summitError(
+                        submitError(
                             ErrorViewModel.ThrowableMessage(
                                 title = context.getString(R.string.account_logging_in_failed),
                                 message = context.formatAccountError(th)
@@ -468,7 +451,7 @@ private fun MicrosoftChangeSkinOperation(
                         else -> context.getString(R.string.generic_error) to context.formatAccountError(th)
                     }
 
-                    summitError(
+                    submitError(
                         ErrorViewModel.ThrowableMessage(
                             title = title,
                             message = message
@@ -493,7 +476,7 @@ private fun MicrosoftChangeSkinOperation(
 private fun MicrosoftChangeCapeOperation(
     operation: MicrosoftChangeCapeOperation,
     updateOperation: (MicrosoftChangeCapeOperation) -> Unit,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit
 ) {
     val context = LocalContext.current
     when (operation) {
@@ -504,15 +487,23 @@ private fun MicrosoftChangeCapeOperation(
                 id = account.uniqueUUID,
                 dispatcher = Dispatchers.IO,
                 task = { task ->
-                    task.updateMessage(R.string.account_change_cape_fetch_all)
-                    val profile = getPlayerProfile(
-                        apiUrl = MINECRAFT_SERVICES_URL,
-                        accessToken = account.accessToken
+                    executeWithAuthorization(
+                        block = {
+                            task.updateProgress(-1f, R.string.account_change_cape_fetch_all)
+                            val profile = getPlayerProfile(
+                                apiUrl = MINECRAFT_SERVICES_URL,
+                                accessToken = account.accessToken
+                            )
+                            updateOperation(MicrosoftChangeCapeOperation.SelectCape(account, profile))
+                        },
+                        onRefreshRequest = {
+                            account.refreshMicrosoft(task = task, coroutineContext = coroutineContext)
+                            AccountsManager.suspendSaveAccount(account)
+                        }
                     )
-                    updateOperation(MicrosoftChangeCapeOperation.SelectCape(account, profile))
                 },
                 onError = { th ->
-                    summitError(
+                    submitError(
                         ErrorViewModel.ThrowableMessage(
                             title = context.getString(R.string.generic_error),
                             message = context.getString(R.string.account_change_cape_fetch_all_failed) + "\r\n" + th.getMessageOrToString()
@@ -544,7 +535,7 @@ private fun MicrosoftChangeCapeOperation(
                     updateOperation(MicrosoftChangeCapeOperation.RunTask(account, cape))
                 },
                 isCurrent = { cape ->
-                    cape.state == "ACTIVE" //ACTIVE表示当前正在使用
+                    cape.isUsing()
                 },
                 onDismissRequest = { selected ->
                     if (!selected) {
@@ -562,11 +553,19 @@ private fun MicrosoftChangeCapeOperation(
             val task = Task.runTask(
                 dispatcher = Dispatchers.IO,
                 task = { task ->
-                    task.updateMessage(R.string.account_change_cape_apply)
-                    changeCape(
-                        apiUrl = MINECRAFT_SERVICES_URL,
-                        accessToken = account.accessToken,
-                        capeId = capeId
+                    executeWithAuthorization(
+                        block = {
+                            task.updateMessage(R.string.account_change_cape_apply)
+                            changeCape(
+                                apiUrl = MINECRAFT_SERVICES_URL,
+                                accessToken = account.accessToken,
+                                capeId = capeId
+                            )
+                        },
+                        onRefreshRequest = {
+                            account.refreshMicrosoft(task = task, coroutineContext = coroutineContext)
+                            AccountsManager.suspendSaveAccount(account)
+                        }
                     )
                     //已变更披风，展示一条Toast反馈用户
                     withContext(Dispatchers.Main) {
@@ -592,7 +591,7 @@ private fun MicrosoftChangeCapeOperation(
                         else -> context.getString(R.string.generic_error) to context.formatAccountError(th)
                     }
 
-                    summitError(
+                    submitError(
                         ErrorViewModel.ThrowableMessage(
                             title = title,
                             message = message
@@ -674,7 +673,7 @@ private fun LocalLoginOperation(
 private fun OtherLoginOperation(
     otherLoginOperation: OtherLoginOperation,
     updateOperation: (OtherLoginOperation) -> Unit,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit,
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
     openLink: (link: String) -> Unit
 ) {
     val context = LocalContext.current
@@ -733,7 +732,7 @@ private fun OtherLoginOperation(
                 }
             }
 
-            summitError(
+            submitError(
                 ErrorViewModel.ThrowableMessage(
                     title = stringResource(R.string.account_logging_in_failed),
                     message = message
@@ -757,7 +756,7 @@ private fun OtherLoginOperation(
 private fun ServerTypeOperation(
     serverOperation: ServerOperation,
     updateServerOperation: (ServerOperation) -> Unit,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit
 ) {
     when (serverOperation) {
         is ServerOperation.AddNew -> {
@@ -799,7 +798,7 @@ private fun ServerTypeOperation(
             )
         }
         is ServerOperation.OnThrowable -> {
-            summitError(
+            submitError(
                 ErrorViewModel.ThrowableMessage(
                     title = stringResource(R.string.account_other_login_adding_failure),
                     message = serverOperation.throwable.getMessageOrToString()
@@ -815,9 +814,7 @@ private fun ServerTypeOperation(
 private fun AccountsLayout(
     isVisible: Boolean,
     modifier: Modifier = Modifier,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit,
-    onAddAuthClicked: () -> Unit,
-    swapToDownloadScreen: (id: String, platform: Platform, classes: PlatformClasses) -> Unit,
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
     onMicrosoftChangeSkin: (Account, Uri) -> Unit,
     onMicrosoftChangeCape: (Account) -> Unit
 ) {
@@ -835,7 +832,7 @@ private fun AccountsLayout(
     AccountOperation(
         accountOperation = accountOperation,
         updateAccountOperation = { accountOperation = it },
-        summitError = summitError
+        submitError = submitError
     )
 
     Card(
@@ -861,10 +858,8 @@ private fun AccountsLayout(
                         account = account,
                         accountSkinOperation = accountSkinOperation,
                         updateOperation = { accountSkinOperation = it },
-                        summitError = summitError,
-                        onAddAuthClicked = onAddAuthClicked,
-                        onRefreshAvatar = { refreshAvatar = !refreshAvatar },
-                        swapToDownloadScreen = swapToDownloadScreen
+                        submitError = submitError,
+                        onRefreshAvatar = { refreshAvatar = !refreshAvatar }
                     )
 
                     val skinPicker = rememberLauncherForActivityResult(
@@ -936,39 +931,53 @@ private fun AccountSkinOperation(
     account: Account,
     accountSkinOperation: AccountSkinOperation,
     updateOperation: (AccountSkinOperation) -> Unit,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit,
-    onAddAuthClicked: () -> Unit = {},
-    onRefreshAvatar: () -> Unit = {},
-    swapToDownloadScreen: (id: String, platform: Platform, classes: PlatformClasses) -> Unit = { _, _, _ -> }
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
+    onRefreshAvatar: () -> Unit = {}
 ) {
     val context = LocalContext.current
     when (accountSkinOperation) {
         is AccountSkinOperation.None -> {}
         is AccountSkinOperation.SaveSkin -> {
-            val skinFile = account.getSkinFile()
-            TaskSystem.submitTask(
-                Task.runTask(
-                    dispatcher = Dispatchers.IO,
-                    task = {
-                        context.copyLocalFile(accountSkinOperation.uri, skinFile)
-                        AccountsManager.suspendSaveAccount(account)
-                        onRefreshAvatar()
-                        //警告用户关于自定义皮肤的一些注意事项
-                        updateOperation(AccountSkinOperation.AlertModel)
-                    },
-                    onError = { th ->
-                        FileUtils.deleteQuietly(skinFile)
-                        summitError(
-                            ErrorViewModel.ThrowableMessage(
-                                title = context.getString(R.string.error_import_image),
-                                message = th.getMessageOrToString()
+            LaunchedEffect(Unit) {
+                val skinFile = account.getSkinFile()
+                val cacheFile = File(PathManager.DIR_IMAGE_CACHE, skinFile.name)
+                TaskSystem.submitTask(
+                    Task.runTask(
+                        dispatcher = Dispatchers.IO,
+                        task = {
+                            context.copyLocalFile(accountSkinOperation.uri, cacheFile)
+                            if (validateSkinFile(cacheFile)) {
+                                //覆盖原本皮肤文件
+                                cacheFile.copyTo(target = skinFile, overwrite = true)
+                                FileUtils.deleteQuietly(cacheFile) //清除缓存皮肤文件
+                                AccountsManager.suspendSaveAccount(account)
+                                onRefreshAvatar()
+                                updateOperation(AccountSkinOperation.None)
+                            } else {
+                                //像素尺寸不符合要求
+                                submitError(
+                                    ErrorViewModel.ThrowableMessage(
+                                        title = context.getString(R.string.generic_warning),
+                                        message = context.getString(R.string.account_change_skin_invalid)
+                                    )
+                                )
+                                updateOperation(AccountSkinOperation.None)
+                            }
+                        },
+                        onError = { th ->
+                            FileUtils.deleteQuietly(cacheFile)
+                            submitError(
+                                ErrorViewModel.ThrowableMessage(
+                                    title = context.getString(R.string.error_import_image),
+                                    message = th.getMessageOrToString()
+                                )
                             )
-                        )
-                        onRefreshAvatar()
-                        updateOperation(AccountSkinOperation.None)
-                    }
+                            onRefreshAvatar()
+                            updateOperation(AccountSkinOperation.None)
+                        }
+                    )
                 )
-            )
+            }
         }
         is AccountSkinOperation.SelectSkinModel -> {
             SelectSkinModelDialog(
@@ -979,61 +988,6 @@ private fun AccountSkinOperation(
                     account.skinModelType = type
                     account.profileId = getLocalUUIDWithSkinModel(account.username, type)
                     updateOperation(AccountSkinOperation.SaveSkin(accountSkinOperation.uri))
-                }
-            )
-        }
-        is AccountSkinOperation.AlertModel -> {
-            AlertDialog(
-                onDismissRequest = {},
-                title = {
-                    Text(
-                        text = stringResource(R.string.generic_warning),
-                        style = MaterialTheme.typography.titleLarge
-                    )
-                },
-                text = {
-                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                        Text(text = stringResource(R.string.account_change_skin_select_model_alert_hint1))
-                        Text(
-                            text = stringResource(R.string.account_change_skin_select_model_alert_hint2),
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(text = stringResource(R.string.account_change_skin_select_model_alert_hint3))
-                        Text(text = stringResource(R.string.account_change_skin_select_model_alert_hint4))
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = stringResource(R.string.account_change_skin_select_model_alert_hint5),
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        IconTextButton(
-                            onClick = {
-                                onAddAuthClicked()
-                                updateOperation(AccountSkinOperation.None)
-                            },
-                            imageVector = Icons.Outlined.Dns,
-                            contentDescription = null,
-                            text = stringResource(R.string.account_change_skin_select_model_alert_auth_server)
-                        )
-                        IconTextButton(
-                            onClick = {
-                                swapToDownloadScreen("idMHQ4n2", Platform.MODRINTH, PlatformClasses.MOD)
-                                updateOperation(AccountSkinOperation.None)
-                            },
-                            imageVector = Icons.Outlined.Checkroom,
-                            contentDescription = null,
-                            text = stringResource(R.string.account_change_skin_select_model_alert_custom_skin_loader)
-                        )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = {
-                            updateOperation(AccountSkinOperation.None)
-                        }
-                    ) {
-                        MarqueeText(text = stringResource(R.string.generic_go_it))
-                    }
                 }
             )
         }
@@ -1069,7 +1023,7 @@ private fun AccountSkinOperation(
 private fun AccountOperation(
     accountOperation: AccountOperation,
     updateAccountOperation: (AccountOperation) -> Unit,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit
 ) {
     val context = LocalContext.current
     when (accountOperation) {
@@ -1089,7 +1043,7 @@ private fun AccountOperation(
         is AccountOperation.OnFailed -> {
             val message: String = context.formatAccountError(accountOperation.th)
 
-            summitError(
+            submitError(
                 ErrorViewModel.ThrowableMessage(
                     title = stringResource(R.string.account_logging_in_failed),
                     message = message

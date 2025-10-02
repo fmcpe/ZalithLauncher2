@@ -16,7 +16,6 @@ import androidx.navigation3.runtime.entry
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSavedStateNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import androidx.navigation3.ui.rememberSceneSetupNavEntryDecorator
 import com.movtery.zalithlauncher.game.download.assets.downloadSingleForVersions
 import com.movtery.zalithlauncher.game.download.assets.install.unpackSaveZip
 import com.movtery.zalithlauncher.game.download.assets.platform.PlatformClasses
@@ -42,7 +41,7 @@ fun DownloadSavesScreen(
     downloadScreenKey: NavKey?,
     downloadSavesScreenKey: NavKey?,
     onCurrentKeyChange: (NavKey?) -> Unit,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit,
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
     eventViewModel: EventViewModel
 ) {
     val backStack = key.backStack
@@ -58,12 +57,12 @@ fun DownloadSavesScreen(
     DownloadSingleOperation(
         operation = operation,
         changeOperation = { operation = it },
-        doInstall = { info, versions ->
+        doInstall = { classes, version, versions ->
             downloadSingleForVersions(
                 context = context,
-                info = info,
+                version = version,
                 versions = versions,
-                folder = info.classes.versionFolder.folderName,
+                folder = classes.versionFolder.folderName,
                 onFileCopied = { file, folder ->
                     unpackSaveZip(
                         zipFile = file,
@@ -77,7 +76,7 @@ fun DownloadSavesScreen(
                         )
                     }
                 },
-                summitError = summitError
+                submitError = submitError
             )
         }
     )
@@ -90,7 +89,6 @@ fun DownloadSavesScreen(
                 onBack(backStack)
             },
             entryDecorators = listOf(
-                rememberSceneSetupNavEntryDecorator(),
                 rememberSavedStateNavEntryDecorator(),
                 rememberViewModelStoreNavEntryDecorator()
             ),
@@ -115,12 +113,12 @@ fun DownloadSavesScreen(
                         currentKey = downloadSavesScreenKey,
                         key = assetsKey,
                         eventViewModel = eventViewModel,
-                        onItemClicked = { info ->
-                            operation = DownloadSingleOperation.SelectVersion(info)
+                        onItemClicked = { classes, version, _ ->
+                            operation = DownloadSingleOperation.SelectVersion(classes, version)
                         },
                         onDependencyClicked = { dep, classes ->
                             backStack.navigateTo(
-                                NormalNavKey.DownloadAssets(dep.platform, dep.projectID, classes)
+                                NormalNavKey.DownloadAssets(dep.platform, dep.projectId, classes)
                             )
                         }
                     )

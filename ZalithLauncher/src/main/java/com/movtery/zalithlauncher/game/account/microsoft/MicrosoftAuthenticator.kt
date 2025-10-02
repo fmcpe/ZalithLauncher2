@@ -21,9 +21,12 @@ import com.movtery.zalithlauncher.game.account.microsoft.models.XBLRequest
 import com.movtery.zalithlauncher.game.account.microsoft.models.XSTSAuthResult
 import com.movtery.zalithlauncher.game.account.microsoft.models.XSTSProperties
 import com.movtery.zalithlauncher.game.account.microsoft.models.XSTSRequest
+import com.movtery.zalithlauncher.game.account.wardrobe.SkinModelType
+import com.movtery.zalithlauncher.game.account.yggdrasil.findUsing
 import com.movtery.zalithlauncher.game.account.yggdrasil.getPlayerProfile
+import com.movtery.zalithlauncher.game.account.yggdrasil.getSkinModel
 import com.movtery.zalithlauncher.info.InfoDistributor
-import com.movtery.zalithlauncher.path.UrlManager.Companion.GLOBAL_CLIENT
+import com.movtery.zalithlauncher.path.GLOBAL_CLIENT
 import com.movtery.zalithlauncher.utils.logging.Logger.lDebug
 import com.movtery.zalithlauncher.utils.network.httpPostJson
 import com.movtery.zalithlauncher.utils.network.submitForm
@@ -329,7 +332,7 @@ private suspend fun createAccount(
 
     val profileId = profile.id
     //避免同一个账号反复添加
-    val account = AccountsManager.loadFromProfileID(profileId) ?: Account()
+    val account = AccountsManager.loadFromProfileID(profileId, AccountType.MICROSOFT.tag) ?: Account()
 
     return account.apply {
         this.username = profile.name
@@ -339,6 +342,7 @@ private suspend fun createAccount(
         this.profileId = profileId
         this.refreshToken = refreshToken.ifEmpty { "None" }
         this.xUid = uhs
+        this.skinModelType = profile.skins.findUsing()?.getSkinModel() ?: SkinModelType.NONE
     }
 }
 

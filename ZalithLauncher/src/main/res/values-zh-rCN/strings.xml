@@ -89,6 +89,7 @@
     <string name="crash_launch_crash_message">启动器在启动的过程中遇到了严重的问题崩溃了</string>
     <!--  错误  -->
     <string name="error_import_image">导入图片时出现问题</string>
+    <string name="error_import_file">导入文件时出现问题</string>
     <string name="error_create_dir">无法创建文件夹：%s</string>
     <string name="error_timeout">访问超时</string>
     <string name="error_network_unreachable">网络不可用</string>
@@ -328,6 +329,8 @@
     <string name="game_menu_option_hotbar_rule_custom">自定义</string>
     <string name="game_menu_option_hotbar_width">快捷栏宽度</string>
     <string name="game_menu_option_hotbar_height">快捷栏高度</string>
+    <string name="game_menu_option_show_menu">开启菜单悬浮窗</string>
+    <string name="game_menu_option_show_menu_hided">已关闭游戏菜单悬浮窗，您可以通过系统返回键调用游戏菜单</string>
     <!--  渲染器  -->
     <string name="renderer_version_support">MC 版本支持：</string>
     <string name="renderer_version_unsupported_warning">当前渲染器 %s 不支持该游戏版本，继续使用可能导致渲染错误或游戏崩溃！您确定要无视风险坚持访问吗？</string>
@@ -364,18 +367,9 @@
     <string name="account_change_skin">更换皮肤</string>
     <string name="account_change_skin_select_model_title">选择皮肤模型</string>
     <string name="account_change_skin_select_model_message">该皮肤是 Steve 模型（粗臂）还是 Alex 模型（细臂）？</string>
-    <string name="account_change_skin_select_model_alert_hint1">启动器将在启动游戏的过程中，以自动生成资源包并加载的方式，实现离线账号自定义皮肤功能。</string>
-    <string name="account_change_skin_select_model_alert_hint2">但请注意，这么做并不适用于所有 Minecraft 版本。</string>
-    <string name="account_change_skin_select_model_alert_hint3">从 Minecraft 1.19.3 起，皮肤种类和角色模型有了更细致的区分。</string>
-    <string name="account_change_skin_select_model_alert_hint4">目前由于技术限制，该功能仅保证在 1.19.2 及以下版本中有效！</string>
-    <string name="account_change_skin_select_model_alert_hint5">代替方案：</string>
-    <string name="account_change_skin_select_model_alert_auth_server">使用认证服务器</string>
-    <string name="account_change_skin_select_model_alert_custom_skin_loader">使用 万用皮肤补丁 模组</string>
     <string name="account_change_skin_model_steve">Steve 模型</string>
     <string name="account_change_skin_model_alex">Alex 模型</string>
     <string name="account_change_skin_reset_skin_message">您确定要重置当前账号的皮肤吗？</string>
-    <string name="account_change_skin_not_supported_alex">当前 Minecraft 版本不支持使用 Alex 模型的皮肤，如果您给当前账号的皮肤设置为 Alex 模型，游戏内将只会显示 Steve 的皮肤！</string>
-    <string name="account_change_skin_compatibility_warning">因技术限制，在当前 Minecraft 版本使用自定义皮肤可能会不生效。</string>
     <string name="account_change_skin_failed_to_import">无法缓存目标文件</string>
     <string name="account_change_skin_invalid">皮肤像素尺寸无效，应为 64x32 像素或 64x64 像素</string>
     <string name="account_change_skin_uploading">上传皮肤文件中</string>
@@ -472,6 +466,7 @@
     <string name="files_current_path">当前路径：%s</string>
     <string name="files_no_selectable_content">该目录没有可选内容</string>
     <string name="file_invalid_length">名称过长！(当前长度：%d，最大长度：%d)</string>
+    <string name="file_invalid_leading_or_trailing_space">不能以空格开头或结尾！</string>
     <!--  Jre  -->
     <string name="multirt_runtime_corrupt">Java 运行环境损坏</string>
     <string name="multirt_runtime_incompatible_arch">不兼容的架构：%s</string>
@@ -602,6 +597,8 @@
     <string name="saves_manage_quick_play">快速启动</string>
     <string name="saves_manage_quick_play_disabled">快速启动（仅限 1.20+）</string>
     <string name="saves_manage_no_saves">当前版本还没有存档</string>
+    <string name="saves_manage_import_unpacking">正在解压存档：%s</string>
+    <string name="saves_manage_import_failed">导入存档时遇到问题</string>
     <string name="resource_pack_manage">资源包管理</string>
     <string name="resource_pack_manage_info">资源包信息</string>
     <string name="resource_pack_manage_invalid">资源包格式无效</string>
@@ -695,8 +692,12 @@
     <string name="settings_control_mouse_control_mode_summary">选择虚拟鼠标的操作方式：滑动屏幕移动光标，或点击屏幕指定位置</string>
     <string name="settings_control_mouse_control_mode_slide">滑动控制</string>
     <string name="settings_control_mouse_control_mode_click">点击控制</string>
-    <string name="settings_control_mouse_pointer_title">虚拟鼠标指针</string>
-    <string name="settings_control_mouse_pointer_summary">自定义虚拟鼠标指针的图片以匹配个人需求</string>
+    <string name="settings_control_mouse_pointer_arrow_title">虚拟鼠标指针（默认）</string>
+    <string name="settings_control_mouse_pointer_arrow_summary">自定义默认虚拟鼠标指针的图片以匹配个人需求</string>
+    <string name="settings_control_mouse_pointer_link_title">虚拟鼠标指针（手形）</string>
+    <string name="settings_control_mouse_pointer_link_summary">MC 1.21.9+ 支持在可交互的组件上，让鼠标指针切换到手形</string>
+    <string name="settings_control_mouse_pointer_ibeam_title">虚拟鼠标指针（输入光标）</string>
+    <string name="settings_control_mouse_pointer_ibeam_summary">MC 1.21.9+ 支持在输入框组件上，让鼠标指针切换到输入光标的形状</string>
     <string name="settings_control_mouse_pointer_reset_message">您确定要重置虚拟鼠标指针的图片吗？</string>
     <string name="settings_control_mouse_long_press_delay_title">虚拟鼠标长按触发的延迟</string>
     <string name="settings_control_mouse_long_press_delay_summary">设置屏幕长按识别的延迟时间（实体鼠标长按不受此设置影响，包括禁用实体鼠标控制时）</string>
@@ -866,6 +867,10 @@
     <string name="about_acknowledgements_mcmod">MC 百科（mcmod.cn）</string>
     <string name="about_acknowledgements_mcmod_text">%s 使用了来自 MC 百科 的模组、整合包翻译</string>
     <string name="about_acknowledgements_bangbang93_text">%s 使用了 BMCL API 镜像源</string>
+    <string name="about_acknowledgements_github_community">GitHub 社区</string>
+    <string name="about_acknowledgements_github_community_text">GitHub 社区的所有议题提出者和贡献者</string>
+    <string name="about_acknowledgements_weblate_community">Weblate 社区</string>
+    <string name="about_acknowledgements_weblate_community_text">所有参与社区语言本地化的翻译者</string>
     <string name="about_plugin_title">已加载的插件</string>
     <string name="about_library_title">额外引入的依赖项目</string>
     <!--  Url  -->

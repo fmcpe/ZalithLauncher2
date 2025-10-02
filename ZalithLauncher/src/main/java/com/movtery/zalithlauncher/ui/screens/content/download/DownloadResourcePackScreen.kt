@@ -16,7 +16,6 @@ import androidx.navigation3.runtime.entry
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSavedStateNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
-import androidx.navigation3.ui.rememberSceneSetupNavEntryDecorator
 import com.movtery.zalithlauncher.game.download.assets.downloadSingleForVersions
 import com.movtery.zalithlauncher.game.download.assets.platform.PlatformClasses
 import com.movtery.zalithlauncher.ui.screens.NestedNavKey
@@ -36,7 +35,7 @@ fun DownloadResourcePackScreen(
     downloadScreenKey: NavKey?,
     downloadResourcePackScreenKey: NavKey?,
     onCurrentKeyChange: (NavKey?) -> Unit,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit,
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit,
     eventViewModel: EventViewModel
 ) {
     val backStack = key.backStack
@@ -52,13 +51,13 @@ fun DownloadResourcePackScreen(
     DownloadSingleOperation(
         operation = operation,
         changeOperation = { operation = it },
-        doInstall = { info, versions ->
+        doInstall = { classes, version, versions ->
             downloadSingleForVersions(
                 context = context,
-                info = info,
+                version = version,
                 versions = versions,
-                folder = info.classes.versionFolder.folderName,
-                summitError = summitError
+                folder = classes.versionFolder.folderName,
+                submitError = submitError
             )
         }
     )
@@ -71,7 +70,6 @@ fun DownloadResourcePackScreen(
                 onBack(backStack)
             },
             entryDecorators = listOf(
-                rememberSceneSetupNavEntryDecorator(),
                 rememberSavedStateNavEntryDecorator(),
                 rememberViewModelStoreNavEntryDecorator()
             ),
@@ -96,12 +94,12 @@ fun DownloadResourcePackScreen(
                         currentKey = downloadResourcePackScreenKey,
                         key = assetsKey,
                         eventViewModel = eventViewModel,
-                        onItemClicked = { info ->
-                            operation = DownloadSingleOperation.SelectVersion(info)
+                        onItemClicked = { classes, version, _ ->
+                            operation = DownloadSingleOperation.SelectVersion(classes, version)
                         },
                         onDependencyClicked = { dep, classes ->
                             backStack.navigateTo(
-                                NormalNavKey.DownloadAssets(dep.platform, dep.projectID, classes)
+                                NormalNavKey.DownloadAssets(dep.platform, dep.projectId, classes)
                             )
                         }
                     )

@@ -4,7 +4,7 @@ import com.movtery.zalithlauncher.game.account.microsoft.MinecraftProfileExcepti
 import com.movtery.zalithlauncher.game.account.microsoft.MinecraftProfileException.ExceptionStatus.FREQUENT
 import com.movtery.zalithlauncher.game.account.microsoft.MinecraftProfileException.ExceptionStatus.PROFILE_NOT_EXISTS
 import com.movtery.zalithlauncher.game.account.wardrobe.SkinModelType
-import com.movtery.zalithlauncher.path.UrlManager.Companion.GLOBAL_CLIENT
+import com.movtery.zalithlauncher.path.GLOBAL_CLIENT
 import com.movtery.zalithlauncher.utils.logging.Logger.lInfo
 import com.movtery.zalithlauncher.utils.network.withRetry
 import io.ktor.client.call.body
@@ -19,6 +19,7 @@ import io.ktor.client.request.setBody
 import io.ktor.http.Headers
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
+import io.ktor.http.HttpStatusCode
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.File
@@ -113,3 +114,26 @@ suspend fun getPlayerProfile(
         }
     }
 }.getOrThrow()
+
+/**
+ * 执行需要授权的操作，如果遇到未授权（HTTP 401），会调用刷新授权的回调
+ */
+suspend fun executeWithAuthorization(
+    block: suspend () -> Unit,
+    onRefreshRequest: suspend () -> Unit
+) {
+    var refreshed = false
+    while (true) {
+        try {
+            block()
+            break
+        } catch (e: ResponseException) {
+            if (e.response.status == HttpStatusCode.Unauthorized) {
+                if (refreshed) throw e //已经刷新过，还是遇到这个问题就抛出异常
+                onRefreshRequest()
+                refreshed = true
+                continue
+            } else throw e
+        }
+    }
+}

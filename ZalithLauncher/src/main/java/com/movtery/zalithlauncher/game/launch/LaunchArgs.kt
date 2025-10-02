@@ -4,6 +4,8 @@ import androidx.collection.ArrayMap
 import com.movtery.zalithlauncher.BuildConfig
 import com.movtery.zalithlauncher.game.account.Account
 import com.movtery.zalithlauncher.game.account.isAuthServerAccount
+import com.movtery.zalithlauncher.game.account.isLocalAccount
+import com.movtery.zalithlauncher.game.account.offline.OfflineYggdrasilServer
 import com.movtery.zalithlauncher.game.multirt.Runtime
 import com.movtery.zalithlauncher.game.path.getAssetsHome
 import com.movtery.zalithlauncher.game.path.getLibrariesHome
@@ -17,17 +19,19 @@ import com.movtery.zalithlauncher.path.LibPath
 import com.movtery.zalithlauncher.path.PathManager
 import com.movtery.zalithlauncher.utils.file.child
 import com.movtery.zalithlauncher.utils.logging.Logger.lDebug
+import com.movtery.zalithlauncher.utils.logging.Logger.lInfo
 import com.movtery.zalithlauncher.utils.logging.Logger.lWarning
 import com.movtery.zalithlauncher.utils.network.ServerAddress
-import com.movtery.zalithlauncher.utils.string.StringUtils
-import com.movtery.zalithlauncher.utils.string.StringUtils.Companion.isNotEmptyOrBlank
-import com.movtery.zalithlauncher.utils.string.StringUtils.Companion.toUnicodeEscaped
+import com.movtery.zalithlauncher.utils.string.insertJSONValueList
 import com.movtery.zalithlauncher.utils.string.isLowerTo
+import com.movtery.zalithlauncher.utils.string.isNotEmptyOrBlank
+import com.movtery.zalithlauncher.utils.string.toUnicodeEscaped
 import java.io.File
 
 class LaunchArgs(
     private val launcher: Launcher,
     private val account: Account,
+    private val offlineServer: OfflineYggdrasilServer,
     private val gameDirPath: File,
     private val version: Version,
     private val gameManifest: GameManifest,
@@ -91,7 +95,23 @@ class LaunchArgs(
     private fun getJavaArgs(): List<String> {
         val argsList: MutableList<String> = ArrayList()
 
-        if (account.isAuthServerAccount()) {
+        if (account.isLocalAccount()) {
+            if (account.hasSkinFile) {
+                //该离线账号拥有本地皮肤，启用离线yggdrasil服务器
+                offlineServer.start()
+                offlineServer.addCharacter(account)
+                offlineServer.getPort()?.let { port ->
+                    lInfo("Using offline Yggdrasil server on port $port")
+                    argsList.add("-javaagent:${LibPath.AUTHLIB_INJECTOR.absolutePath}=http://localhost:$port")
+                    argsList.add("-Dauthlibinjector.side=client")
+                } ?: run {
+                    //无法获取端口号，说明服务器未成功启动
+                    lWarning("Failed to start offline Yggdrasil server!")
+                    //本次启动将被忽略，为避免浪费性能，关停服务器
+                    offlineServer.stop()
+                }
+            }
+        } else if (account.isAuthServerAccount()) {
             if (account.otherBaseUrl!!.contains("auth.mc-user.com")) {
                 argsList.add("-javaagent:${LibPath.NIDE_8_AUTH.absolutePath}=${account.otherBaseUrl!!.replace("https://auth.mc-user.com:233/", "")}")
                 argsList.add("-Dnide8auth.client=true")
@@ -104,7 +124,7 @@ class LaunchArgs(
 
         val configFilePath = version.getVersionPath().child("log4j2.xml")
         if (!configFilePath.exists()) {
-            val is7 = (gameManifest.id ?: "0.0").isLowerTo("1.12")
+            val is7 = (version.getVersionInfo()?.minecraftVersion ?: "0.0").isLowerTo("1.12")
             runCatching {
                 val content = if (is7) {
                     readAssetsFile("components/log4j-1.7.xml")
@@ -118,13 +138,6 @@ class LaunchArgs(
         }
         argsList.add("-Dlog4j.configurationFile=${configFilePath.absolutePath}")
         argsList.add("-Dminecraft.client.jar=${version.getClientJar().absolutePath}")
-
-        val versionSpecificNativesDir = File(PathManager.DIR_CACHE, "natives/${version.getVersionName()}")
-        if (versionSpecificNativesDir.exists()) {
-            val dirPath = versionSpecificNativesDir.absolutePath
-            argsList.add("-Djava.library.path=$dirPath:${PathManager.DIR_NATIVE_LIB}")
-            argsList.add("-Djna.boot.library.path=$dirPath")
-        }
 
         return argsList
     }
@@ -171,7 +184,7 @@ class LaunchArgs(
             ?.toTypedArray()
             ?: emptyArray()
 
-        val replacedArgs = StringUtils.insertJSONValueList(jvmArgs, varArgMap)
+        val replacedArgs = insertJSONValueList(jvmArgs, varArgMap)
         return if (hasClasspath) {
             replacedArgs
         } else {
@@ -212,7 +225,7 @@ class LaunchArgs(
     private fun generateLibClasspath(gameManifest: GameManifest): Array<String> {
         val libDir: MutableList<String> = ArrayList()
         for (libItem in gameManifest.libraries) {
-            if (!checkRules(libItem.rules)) continue
+            if (!(GameManifest.Rule.checkRules(libItem.rules) && !libItem.isNative)) continue
             val libArtifactPath: String = libItem.progressLibrary() ?: continue
             libDir.add(getLibrariesHome() + "/" + libArtifactPath)
         }
@@ -234,20 +247,6 @@ class LaunchArgs(
         }
 
         return path
-    }
-
-    /**
-     * [Modified from PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher/blob/a6f3fc0/app_pojavlauncher/src/main/java/net/kdt/pojavlaunch/Tools.java#L815-L823)
-     */
-    private fun checkRules(rules: List<GameManifest.Rule>?): Boolean {
-        if (rules == null) return true // always allow
-
-        for (rule in rules) {
-            if (rule.action.equals("allow") && rule.os != null && rule.os.name.equals("osx")) {
-                return false //disallow
-            }
-        }
-        return true // allow if none match
     }
 
     private fun getMinecraftClientArgs(): Array<String> {
@@ -273,7 +272,7 @@ class LaunchArgs(
             game.forEach { if (it is String) minecraftArgs.add(it) }
         }
 
-        return StringUtils.insertJSONValueList(
+        return insertJSONValueList(
             splitAndFilterEmpty(
                 gameManifest.minecraftArguments ?:
                 minecraftArgs.toTypedArray().joinToString(" ")

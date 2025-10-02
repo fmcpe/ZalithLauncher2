@@ -5,9 +5,9 @@ import android.widget.Toast
 import com.movtery.zalithlauncher.R
 import com.movtery.zalithlauncher.coroutine.Task
 import com.movtery.zalithlauncher.coroutine.TaskSystem
-import com.movtery.zalithlauncher.game.account.auth_server.AuthServerApi
 import com.movtery.zalithlauncher.game.account.auth_server.AuthServerHelper
 import com.movtery.zalithlauncher.game.account.auth_server.data.AuthServer
+import com.movtery.zalithlauncher.game.account.auth_server.getAuthServeInfo
 import com.movtery.zalithlauncher.game.account.microsoft.AsyncStatus
 import com.movtery.zalithlauncher.game.account.microsoft.AuthType
 import com.movtery.zalithlauncher.game.account.microsoft.MinecraftProfileException
@@ -39,7 +39,7 @@ import java.util.Objects
 import kotlin.coroutines.CoroutineContext
 
 fun Account.isAuthServerAccount(): Boolean {
-    return !Objects.isNull(otherBaseUrl) && otherBaseUrl != "0"
+    return !isLocalAccount() && !Objects.isNull(otherBaseUrl) && otherBaseUrl != "0"
 }
 
 fun Account.isMicrosoftAccount(): Boolean {
@@ -79,7 +79,7 @@ fun microsoftLogin(
     backToMain: () -> Unit,
     checkIfInWebScreen: () -> Boolean,
     updateOperation: (MicrosoftLoginOperation) -> Unit,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit
 ) {
     val task = Task.runTask(
         id = MICROSOFT_LOGGING_TASK,
@@ -101,7 +101,7 @@ fun microsoftLogin(
                 !checkIfInWebScreen()
             }
             backToMain()
-            val account = authAsync(
+            val account = microsoftAuth(
                 AuthType.Access,
                 tokenResponse.refreshToken,
                 tokenResponse.accessToken,
@@ -135,7 +135,7 @@ fun microsoftLogin(
                     context.getString(R.string.error_unknown, errorMessage)
                 }
             }?.let { message ->
-                summitError(
+                submitError(
                     ErrorViewModel.ThrowableMessage(
                         title = context.getString(R.string.account_logging_in_failed),
                         message = message
@@ -151,7 +151,7 @@ fun microsoftLogin(
     TaskSystem.submitTask(task)
 }
 
-private suspend fun authAsync(
+private suspend fun microsoftAuth(
     authType: AuthType,
     refreshToken: String,
     accessToken: String = "NULL",
@@ -182,21 +182,7 @@ fun microsoftRefresh(
         id = account.profileId,
         dispatcher = Dispatchers.IO,
         task = { task ->
-            val newAcc = authAsync(
-                AuthType.Refresh,
-                account.refreshToken,
-                account.accessToken,
-                coroutineContext = coroutineContext,
-                updateProgress = task::updateProgress
-            )
-            account.apply {
-                this.accessToken = newAcc.accessToken
-                this.clientToken = newAcc.clientToken
-                this.profileId = newAcc.profileId
-                this.username = newAcc.username
-                this.refreshToken = newAcc.refreshToken
-                this.xUid = newAcc.xUid
-            }
+            account.refreshMicrosoft(task, coroutineContext)
             onSuccess(account, task)
         },
         onError = { e ->
@@ -205,6 +191,27 @@ fun microsoftRefresh(
         },
         onFinally = onFinally
     )
+}
+
+suspend fun Account.refreshMicrosoft(
+    task: Task,
+    coroutineContext: CoroutineContext = Dispatchers.IO
+) {
+    val newAcc = microsoftAuth(
+        AuthType.Refresh,
+        refreshToken,
+        accessToken,
+        coroutineContext = coroutineContext,
+        updateProgress = task::updateProgress
+    )
+    apply {
+        this.accessToken = newAcc.accessToken
+        this.clientToken = newAcc.clientToken
+        this.profileId = newAcc.profileId
+        this.username = newAcc.username
+        this.refreshToken = newAcc.refreshToken
+        this.xUid = newAcc.xUid
+    }
 }
 
 fun otherLogin(
@@ -249,7 +256,7 @@ fun addOtherServer(
             ensureActive()
             task.updateProgress(0.5f, R.string.account_other_login_getting_server_info)
             runCatching {
-                AuthServerApi.getServeInfo(fullServerUrl)
+                getAuthServeInfo(fullServerUrl)
             }.onFailure { th ->
                 lError("Failed to get server info", th)
                 onThrowable(th)

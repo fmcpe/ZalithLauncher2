@@ -1,21 +1,27 @@
 package com.movtery.zalithlauncher.ui.screens.content.versions
 
+import android.content.Context
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -27,6 +33,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.Block
@@ -44,9 +51,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RichTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -57,7 +66,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
@@ -76,9 +87,9 @@ import com.movtery.zalithlauncher.game.version.installed.Version
 import com.movtery.zalithlauncher.game.version.installed.VersionFolders
 import com.movtery.zalithlauncher.game.version.mod.AllModReader
 import com.movtery.zalithlauncher.game.version.mod.LocalMod
-import com.movtery.zalithlauncher.game.version.mod.LocalMod.Companion.isDisabled
-import com.movtery.zalithlauncher.game.version.mod.LocalMod.Companion.isEnabled
 import com.movtery.zalithlauncher.game.version.mod.RemoteMod
+import com.movtery.zalithlauncher.game.version.mod.isDisabled
+import com.movtery.zalithlauncher.game.version.mod.isEnabled
 import com.movtery.zalithlauncher.ui.base.BaseScreen
 import com.movtery.zalithlauncher.ui.components.IconTextButton
 import com.movtery.zalithlauncher.ui.components.LittleTextLabel
@@ -89,6 +100,7 @@ import com.movtery.zalithlauncher.ui.components.itemLayoutColor
 import com.movtery.zalithlauncher.ui.screens.NestedNavKey
 import com.movtery.zalithlauncher.ui.screens.NormalNavKey
 import com.movtery.zalithlauncher.ui.screens.content.download.assets.elements.AssetsIcon
+import com.movtery.zalithlauncher.ui.screens.content.elements.ImportFileButton
 import com.movtery.zalithlauncher.ui.screens.content.versions.elements.ByteArrayIcon
 import com.movtery.zalithlauncher.ui.screens.content.versions.elements.LoadingState
 import com.movtery.zalithlauncher.ui.screens.content.versions.elements.ModsOperation
@@ -97,7 +109,8 @@ import com.movtery.zalithlauncher.ui.screens.content.versions.layouts.VersionSet
 import com.movtery.zalithlauncher.utils.animation.getAnimateTween
 import com.movtery.zalithlauncher.utils.animation.swapAnimateDpAsState
 import com.movtery.zalithlauncher.utils.file.formatFileSize
-import com.movtery.zalithlauncher.utils.string.StringUtils.Companion.isNotEmptyOrBlank
+import com.movtery.zalithlauncher.utils.string.isNotEmptyOrBlank
+import com.movtery.zalithlauncher.viewmodel.ErrorViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -125,6 +138,11 @@ private class ModsManageViewModel(
     var filteredMods by mutableStateOf<List<RemoteMod>?>(null)
         private set
 
+    /**
+     * 已选择的模组
+     */
+    val selectedMods = mutableStateListOf<RemoteMod>()
+
     /** 作为标记，记录哪些模组已被加载 */
     private val modsToLoad = mutableListOf<RemoteMod>()
     private val loadQueue = LinkedList<Pair<RemoteMod, Boolean>>()
@@ -136,13 +154,14 @@ private class ModsManageViewModel(
 
     private var job: Job? = null
 
-    fun refresh() {
+    fun refresh(context: Context? = null) {
         job?.cancel()
         job = viewModelScope.launch {
             modsState = LoadingState.Loading
+            selectedMods.clear() //清空所有已选择的模组
             try {
                 allMods = modReader.readAllMods()
-                filterMods()
+                filterMods(context)
             } catch (_: CancellationException) {
                 //已取消
             }
@@ -155,13 +174,13 @@ private class ModsManageViewModel(
         startQueueProcessor()
     }
 
-    fun updateFilter(name: String) {
+    fun updateFilter(name: String, context: Context? = null) {
         this.nameFilter = name
-        filterMods()
+        filterMods(context)
     }
 
-    private fun filterMods() {
-        filteredMods = allMods.takeIf { it.isNotEmpty() }?.filterMods(nameFilter)
+    private fun filterMods(context: Context? = null) {
+        filteredMods = allMods.takeIf { it.isNotEmpty() }?.filterMods(nameFilter, context)
     }
 
     /** 在ViewModel的生命周期协程内调用 */
@@ -192,6 +211,8 @@ private class ModsManageViewModel(
 
                 launch {
                     try {
+                        //重载模组信息时，应从选择列表中清除
+                        selectedMods.remove(mod)
                         mod.load(loadFromCache)
                     } finally {
                         semaphore.release()
@@ -241,13 +262,13 @@ private class ModsManageViewModel(
 
 @Composable
 private fun rememberModsManageViewModel(
-    version: Version
+    version: Version,
+    modsDir: File,
 ): ModsManageViewModel {
-    val folderName = VersionFolders.MOD.folderName
     return viewModel(
-        key = version.toString() + "_" + folderName
+        key = version.toString() + "_" + VersionFolders.MOD.folderName
     ) {
-        ModsManageViewModel(File(version.getGameDir(), folderName))
+        ModsManageViewModel(modsDir)
     }
 }
 
@@ -257,9 +278,12 @@ fun ModsManagerScreen(
     versionsScreenKey: NavKey?,
     version: Version,
     backToMainScreen: () -> Unit,
-    swapToDownload: () -> Unit = {},
-    onSwapMoreInfo: (id: String, Platform) -> Unit
+    swapToDownload: () -> Unit,
+    onSwapMoreInfo: (id: String, Platform) -> Unit,
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit
 ) {
+    val context = LocalContext.current
+
     if (!version.isValid()) {
         backToMainScreen()
         return
@@ -271,7 +295,8 @@ fun ModsManagerScreen(
         ),
         Triple(NormalNavKey.Versions.ModsManager, versionsScreenKey, false)
     ) { isVisible ->
-        val viewModel = rememberModsManageViewModel(version)
+        val modsDir = File(version.getGameDir(), VersionFolders.MOD.folderName)
+        val viewModel = rememberModsManageViewModel(version, modsDir)
 
         val yOffset by swapAnimateDpAsState(
             targetValue = (-40).dp,
@@ -297,7 +322,7 @@ fun ModsManagerScreen(
                                 modsOperation = ModsOperation.Progress
                                 task()
                                 modsOperation = ModsOperation.None
-                                viewModel.refresh()
+                                viewModel.refresh(context)
                             }
                         }
                     }
@@ -320,9 +345,13 @@ fun ModsManagerScreen(
                             inputFieldColor = itemColor,
                             inputFieldContentColor = itemContentColor,
                             nameFilter = viewModel.nameFilter,
-                            onNameFilterChange = { viewModel.updateFilter(it) },
+                            onNameFilterChange = { viewModel.updateFilter(it, context) },
+                            modsDir = modsDir,
+                            isModsSelected = viewModel.selectedMods.isNotEmpty(),
+                            onClearModsSelected = { viewModel.selectedMods.clear() },
                             swapToDownload = swapToDownload,
-                            refresh = { viewModel.refresh() }
+                            refresh = { viewModel.refresh(context) },
+                            submitError = submitError
                         )
 
                         ModsList(
@@ -330,6 +359,13 @@ fun ModsManagerScreen(
                                 .fillMaxWidth()
                                 .weight(1f),
                             modsList = viewModel.filteredMods,
+                            selectedMods = viewModel.selectedMods,
+                            removeFromSelected = { mod ->
+                                viewModel.selectedMods.remove(mod)
+                            },
+                            addToSelected = { mod ->
+                                viewModel.selectedMods.add(mod)
+                            },
                             onLoad = { mod ->
                                 viewModel.loadMod(mod)
                             },
@@ -375,9 +411,13 @@ private fun ModsActionsHeader(
     inputFieldColor: Color,
     inputFieldContentColor: Color,
     nameFilter: String,
-    onNameFilterChange: (String) -> Unit = {},
-    swapToDownload: () -> Unit = {},
-    refresh: () -> Unit = {}
+    onNameFilterChange: (String) -> Unit,
+    modsDir: File,
+    isModsSelected: Boolean,
+    onClearModsSelected: () -> Unit,
+    swapToDownload: () -> Unit,
+    refresh: () -> Unit,
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit = {}
 ) {
     Column(modifier = modifier) {
         Row(
@@ -400,7 +440,41 @@ private fun ModsActionsHeader(
                 singleLine = true
             )
 
-            Spacer(modifier = Modifier.width(12.dp))
+            AnimatedVisibility(
+                modifier = Modifier.height(IntrinsicSize.Min),
+                visible = isModsSelected
+            ) {
+                Row {
+                    IconButton(
+                        onClick = {
+                            if (isModsSelected) onClearModsSelected()
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Deselect,
+                            contentDescription = null
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    VerticalDivider(
+                        modifier = Modifier
+                            .fillMaxHeight()
+                            .padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            ImportFileButton(
+                extension = "jar",
+                targetDir = modsDir,
+                submitError = submitError,
+                onImported = refresh
+            )
 
             IconTextButton(
                 onClick = swapToDownload,
@@ -429,6 +503,9 @@ private fun ModsActionsHeader(
 private fun ModsList(
     modifier: Modifier = Modifier,
     modsList: List<RemoteMod>?,
+    selectedMods: List<RemoteMod>,
+    removeFromSelected: (RemoteMod) -> Unit,
+    addToSelected: (RemoteMod) -> Unit,
     onLoad: (RemoteMod) -> Unit,
     onForceRefresh: (RemoteMod) -> Unit,
     onEnable: (RemoteMod) -> Unit,
@@ -457,6 +534,16 @@ private fun ModsList(
                         onForceRefresh = {
                             onForceRefresh(mod)
                         },
+                        onClick = {
+                            if (mod.isLoaded) {
+                                //仅加载了项目信息的模组允许被选择
+                                if (selectedMods.contains(mod)) {
+                                    removeFromSelected(mod)
+                                } else {
+                                    addToSelected(mod)
+                                }
+                            }
+                        },
                         onEnable = {
                             onEnable(mod)
                         },
@@ -467,6 +554,7 @@ private fun ModsList(
                         onDelete = {
                             onDelete(mod)
                         },
+                        selected = selectedMods.contains(mod),
                         itemColor = itemColor,
                         itemContentColor = itemContentColor
                     )
@@ -496,14 +584,23 @@ private fun ModItemLayout(
     onDisable: () -> Unit,
     onSwapMoreInfo: (id: String, Platform) -> Unit,
     onDelete: () -> Unit,
+    selected: Boolean,
     itemColor: Color,
     itemContentColor: Color,
+    borderColor: Color = MaterialTheme.colorScheme.primary,
+    shape: Shape = MaterialTheme.shapes.large,
     shadowElevation: Dp = 1.dp
 ) {
+    val borderWidth by animateDpAsState(
+        if (selected) 2.dp
+        else (-1).dp
+    )
+
     val scale = remember { Animatable(initialValue = 0.95f) }
     LaunchedEffect(Unit) {
         scale.animateTo(targetValue = 1f, animationSpec = getAnimateTween())
     }
+    val context = LocalContext.current
 
     val projectInfo = mod.projectInfo
 
@@ -513,9 +610,15 @@ private fun ModItemLayout(
     }
 
     Surface(
-        modifier = modifier.graphicsLayer(scaleY = scale.value, scaleX = scale.value),
+        modifier = modifier
+            .graphicsLayer(scaleY = scale.value, scaleX = scale.value)
+            .border(
+                width = borderWidth,
+                color = borderColor,
+                shape = shape
+            ),
         onClick = onClick,
-        shape = MaterialTheme.shapes.large,
+        shape = shape,
         color = itemColor,
         contentColor = itemContentColor,
         shadowElevation = shadowElevation
@@ -567,7 +670,7 @@ private fun ModItemLayout(
                             ) {
                                 val displayTitle = if (projectInfo != null) {
                                     val title = projectInfo.title
-                                    mod.mcMod?.getMcmodTitle(title) ?: title
+                                    mod.mcMod?.getMcmodTitle(title, context) ?: title
                                 } else {
                                     localMod.name
                                 }
@@ -586,9 +689,9 @@ private fun ModItemLayout(
                                         .animateContentSize(),
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    val remoteLoaders = mod.remoteLoaders
-                                    if (remoteLoaders != null && remoteLoaders.loaders.isNotEmpty()) {
-                                        remoteLoaders.loaders.forEach { loader ->
+                                    val remoteLoaders = mod.remoteFile?.loaders
+                                    if (remoteLoaders != null && remoteLoaders.isNotEmpty()) {
+                                        remoteLoaders.forEach { loader ->
                                             LittleTextLabel(
                                                 text = loader.getDisplayName(),
                                                 shape = MaterialTheme.shapes.small

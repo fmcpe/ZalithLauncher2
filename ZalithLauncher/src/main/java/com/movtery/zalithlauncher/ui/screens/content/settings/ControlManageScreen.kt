@@ -1,7 +1,5 @@
 package com.movtery.zalithlauncher.ui.screens.content.settings
 
-import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -25,7 +23,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.outlined.AddBox
 import androidx.compose.material.icons.outlined.Delete
@@ -40,7 +37,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -50,7 +46,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -69,8 +64,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.runtime.NavKey
-import com.movtery.layer_controller.data.lang.TranslatableString
+import com.movtery.layer_controller.data.lang.createTranslatable
 import com.movtery.layer_controller.layout.ControlLayout
+import com.movtery.layer_controller.layout.EmptyControlLayout
+import com.movtery.layer_controller.layout.EmptyLayoutInfo
 import com.movtery.layer_controller.observable.ObservableTranslatableString
 import com.movtery.layer_controller.utils.AUTHOR_NAME_LENGTH
 import com.movtery.layer_controller.utils.NAME_LENGTH
@@ -78,7 +75,6 @@ import com.movtery.layer_controller.utils.VERSION_NAME_LENGTH
 import com.movtery.layer_controller.utils.newRandomFileName
 import com.movtery.layer_controller.utils.saveToFile
 import com.movtery.zalithlauncher.R
-import com.movtery.zalithlauncher.contract.ExtensionFilteredDocumentPicker
 import com.movtery.zalithlauncher.coroutine.Task
 import com.movtery.zalithlauncher.coroutine.TaskSystem
 import com.movtery.zalithlauncher.game.control.ControlData
@@ -87,6 +83,7 @@ import com.movtery.zalithlauncher.path.PathManager
 import com.movtery.zalithlauncher.setting.AllSettings
 import com.movtery.zalithlauncher.ui.activities.startEditorActivity
 import com.movtery.zalithlauncher.ui.base.BaseScreen
+import com.movtery.zalithlauncher.ui.components.AnimatedRow
 import com.movtery.zalithlauncher.ui.components.IconTextButton
 import com.movtery.zalithlauncher.ui.components.MarqueeText
 import com.movtery.zalithlauncher.ui.components.ScalingActionButton
@@ -97,12 +94,12 @@ import com.movtery.zalithlauncher.ui.components.itemLayoutColor
 import com.movtery.zalithlauncher.ui.components.rememberAutoScrollToEndState
 import com.movtery.zalithlauncher.ui.screens.NestedNavKey
 import com.movtery.zalithlauncher.ui.screens.NormalNavKey
+import com.movtery.zalithlauncher.ui.screens.content.elements.ImportFileButton
 import com.movtery.zalithlauncher.ui.screens.main.control_editor.edit_translatable.EditTranslatableTextDialog
 import com.movtery.zalithlauncher.utils.animation.getAnimateTween
-import com.movtery.zalithlauncher.utils.animation.swapAnimateDpAsState
 import com.movtery.zalithlauncher.utils.file.shareFile
-import com.movtery.zalithlauncher.utils.string.StringUtils.Companion.getMessageOrToString
-import com.movtery.zalithlauncher.utils.string.StringUtils.Companion.isEmptyOrBlank
+import com.movtery.zalithlauncher.utils.string.getMessageOrToString
+import com.movtery.zalithlauncher.utils.string.isEmptyOrBlank
 import com.movtery.zalithlauncher.viewmodel.ErrorViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
@@ -127,8 +124,6 @@ private sealed interface ControlOperation {
     data class EditDescription(val data: ControlData) : ControlOperation
     /** 编辑版本名称 */
     data class EditVersion(val data: ControlData) : ControlOperation
-    /** 处理用户选择的Uri */
-    data class ProgressUri(val uris: List<Uri>) : ControlOperation
 }
 
 private enum class EditTextType(val length: Int, val titleRes: Int, val allowEmpty: Boolean) {
@@ -141,14 +136,14 @@ private class ControlViewModel : ViewModel() {
 
     fun createNew(
         layout: ControlLayout,
-        summitError: (Exception) -> Unit
+        submitError: (Exception) -> Unit
     ) {
         viewModelScope.launch {
             val file = File(PathManager.DIR_CONTROL_LAYOUTS, "${newRandomFileName()}.json")
             try {
                 layout.saveToFile(file)
             } catch (e: Exception) {
-                summitError(e)
+                submitError(e)
                 FileUtils.deleteQuietly(file)
             }
             ControlManager.refresh()
@@ -172,7 +167,7 @@ fun ControlManageScreen(
     key: NestedNavKey.Settings,
     settingsScreenKey: NavKey?,
     mainScreenKey: NavKey?,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit
 ) {
     val viewModel = rememberControlViewModel()
     val dataList by ControlManager.dataList.collectAsState()
@@ -181,28 +176,19 @@ fun ControlManageScreen(
     val configuration = LocalConfiguration.current
     val locale = configuration.locales[0]
 
-    /** Json文件选择器 */
-    val jsonPicker = rememberLauncherForActivityResult(
-        contract = ExtensionFilteredDocumentPicker(extension = "json", allowMultiple = true)
-    ) { uris ->
-        uris.takeIf { it.isNotEmpty() }?.let {
-            viewModel.operation = ControlOperation.ProgressUri(it)
-        }
-    }
-
     ControlOperation(
         operation = viewModel.operation,
         changeOperation = { viewModel.operation = it },
         onCreate = { name, author, versionName ->
-            val layout = ControlLayout.Empty.copy(
-                info = ControlLayout.Info.Empty.copy(
-                    name = TranslatableString.create(default = name),
-                    author = TranslatableString.create(default = author),
+            val layout = EmptyControlLayout.copy(
+                info = EmptyLayoutInfo.copy(
+                    name = createTranslatable(default = name),
+                    author = createTranslatable(default = author),
                     versionName = versionName
                 )
             )
             viewModel.createNew(layout) { e ->
-                summitError(
+                submitError(
                     ErrorViewModel.ThrowableMessage(
                         title = context.getString(R.string.control_manage_failed_to_save),
                         message = e.getMessageOrToString()
@@ -220,81 +206,65 @@ fun ControlManageScreen(
                     message = e.getMessageOrToString()
                 )
             }
-        },
-        summitError = summitError
+        }
     )
 
     BaseScreen(
         Triple(key, mainScreenKey, false),
         Triple(NormalNavKey.Settings.ControlManager, settingsScreenKey, false)
     ) { isVisible ->
-        Row(
+        AnimatedRow(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(all = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            val xOffset1 by swapAnimateDpAsState(
-                targetValue = 40.dp,
-                swapIn = isVisible,
-                isHorizontal = true
-            )
-
-            ControlLayoutList(
-                modifier = Modifier
-                    .weight(0.5f)
-                    .offset {
-                        IntOffset(x = xOffset1.roundToPx(), y = 0)
+            isVisible = isVisible
+        ) { scope ->
+            AnimatedItem(scope) { xOffset ->
+                ControlLayoutList(
+                    modifier = Modifier
+                        .weight(0.5f)
+                        .offset { IntOffset(x = xOffset.roundToPx(), y = 0) },
+                    dataList = dataList,
+                    locale = locale,
+                    isLoading = ControlManager.isRefreshing,
+                    onRefresh = {
+                        ControlManager.refresh()
                     },
-                dataList = dataList,
-                locale = locale,
-                isLoading = ControlManager.isRefreshing,
-                onRefresh = {
-                    ControlManager.refresh()
-                },
-                onImport = {
-                    jsonPicker.launch("")
-                },
-                onCreate = {
-                    viewModel.operation = ControlOperation.CreateNew
-                },
-                onDelete = { data ->
-                    viewModel.operation = ControlOperation.Delete(data)
-                }
-            )
-
-            val xOffset2 by swapAnimateDpAsState(
-                targetValue = 40.dp,
-                swapIn = isVisible,
-                isHorizontal = true,
-                delayMillis = 50
-            )
-
-            ControlLayoutInfo(
-                modifier = Modifier
-                    .weight(0.5f)
-                    .offset {
-                        IntOffset(x = xOffset2.roundToPx(), y = 0)
+                    onCreate = {
+                        viewModel.operation = ControlOperation.CreateNew
                     },
-                isLoading = ControlManager.isRefreshing,
-                data = ControlManager.selectedLayout,
-                locale = locale,
-                onShareLayout = { data ->
-                    shareFile(context, data.file)
-                },
-                onEditLayout = { data ->
-                    startEditorActivity(context, data.file)
-                },
-                onEditText = { data, string, type ->
-                    viewModel.operation = ControlOperation.EditText(data, string, type)
-                },
-                onEditDescription = { data ->
-                    viewModel.operation = ControlOperation.EditDescription(data)
-                },
-                onEditVersion = { data ->
-                    viewModel.operation = ControlOperation.EditVersion(data)
-                }
-            )
+                    onDelete = { data ->
+                        viewModel.operation = ControlOperation.Delete(data)
+                    },
+                    submitError = submitError
+                )
+            }
+
+            AnimatedItem(scope) { xOffset ->
+                ControlLayoutInfo(
+                    modifier = Modifier
+                        .weight(0.5f)
+                        .offset { IntOffset(x = xOffset.roundToPx(), y = 0) },
+                    isLoading = ControlManager.isRefreshing,
+                    data = ControlManager.selectedLayout,
+                    locale = locale,
+                    onShareLayout = { data ->
+                        shareFile(context, data.file)
+                    },
+                    onEditLayout = { data ->
+                        startEditorActivity(context, data.file)
+                    },
+                    onEditText = { data, string, type ->
+                        viewModel.operation = ControlOperation.EditText(data, string, type)
+                    },
+                    onEditDescription = { data ->
+                        viewModel.operation = ControlOperation.EditDescription(data)
+                    },
+                    onEditVersion = { data ->
+                        viewModel.operation = ControlOperation.EditVersion(data)
+                    }
+                )
+            }
         }
     }
 }
@@ -308,11 +278,8 @@ private fun ControlOperation(
     changeOperation: (ControlOperation) -> Unit,
     onCreate: (name: String, author: String, versionName: String) -> Unit,
     onDelete: (ControlData) -> Unit,
-    onSave: (ControlData) -> Unit,
-    summitError: (ErrorViewModel.ThrowableMessage) -> Unit
+    onSave: (ControlData) -> Unit
 ) {
-    val context = LocalContext.current
-
     when (operation) {
         is ControlOperation.None -> {}
         is ControlOperation.CreateNew -> {
@@ -402,47 +369,6 @@ private fun ControlOperation(
                 }
             )
         }
-        is ControlOperation.ProgressUri -> {
-            val uris = operation.uris
-            fun showError(
-                title: String = context.getString(R.string.control_manage_import_failed),
-                message: String
-            ) {
-                summitError(
-                    ErrorViewModel.ThrowableMessage(
-                        title = title,
-                        message = message
-                    )
-                )
-            }
-            TaskSystem.submitTask(
-                Task.runTask(
-                    dispatcher = Dispatchers.IO,
-                    task = { task ->
-                        uris.forEach { uri ->
-                            val inputStream = context.contentResolver.openInputStream(uri) ?: run {
-                                showError(message = context.getString(R.string.multirt_runtime_import_failed_input_stream))
-                                return@forEach
-                            }
-                            ControlManager.importControl(
-                                inputStream = inputStream,
-                                onSerializationError = {
-                                    showError(
-                                        message = context.getString(R.string.control_manage_import_failed_to_parse) + "\n" +
-                                                it.getMessageOrToString()
-                                    )
-                                },
-                                catchedError =  {
-                                    showError(message = it.getMessageOrToString())
-                                }
-                            )
-                        }
-                        ControlManager.refresh()
-                    }
-                )
-            )
-            changeOperation(ControlOperation.None)
-        }
     }
 }
 
@@ -456,9 +382,9 @@ private fun ControlLayoutList(
     locale: Locale,
     isLoading: Boolean,
     onRefresh: () -> Unit,
-    onImport: () -> Unit,
     onCreate: () -> Unit,
-    onDelete: (ControlData) -> Unit
+    onDelete: (ControlData) -> Unit,
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit
 ) {
     Card(
         modifier = modifier.fillMaxHeight(),
@@ -475,8 +401,8 @@ private fun ControlLayoutList(
             ControlListHeader(
                 modifier = Modifier.fillMaxWidth(),
                 onRefresh = onRefresh,
-                onImport = onImport,
-                onCreate = onCreate
+                onCreate = onCreate,
+                submitError = submitError
             )
 
             HorizontalDivider(
@@ -525,9 +451,11 @@ private fun ControlLayoutList(
 private fun ControlListHeader(
     modifier: Modifier = Modifier,
     onRefresh: () -> Unit,
-    onImport: () -> Unit,
-    onCreate: () -> Unit
+    onCreate: () -> Unit,
+    submitError: (ErrorViewModel.ThrowableMessage) -> Unit
 ) {
+    val context = LocalContext.current
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -542,11 +470,47 @@ private fun ControlListHeader(
             contentDescription = stringResource(R.string.generic_refresh),
             text = stringResource(R.string.generic_refresh),
         )
-        IconTextButton(
-            onClick = onImport,
-            imageVector = Icons.Default.Add,
-            contentDescription = stringResource(R.string.generic_import),
-            text = stringResource(R.string.generic_import),
+        ImportFileButton(
+            extension = "json",
+            progressUris = { uris ->
+                fun showError(
+                    title: String = context.getString(R.string.control_manage_import_failed),
+                    message: String
+                ) {
+                    submitError(
+                        ErrorViewModel.ThrowableMessage(
+                            title = title,
+                            message = message
+                        )
+                    )
+                }
+                TaskSystem.submitTask(
+                    Task.runTask(
+                        dispatcher = Dispatchers.IO,
+                        task = { task ->
+                            uris.forEach { uri ->
+                                val inputStream = context.contentResolver.openInputStream(uri) ?: run {
+                                    showError(message = context.getString(R.string.multirt_runtime_import_failed_input_stream))
+                                    return@forEach
+                                }
+                                ControlManager.importControl(
+                                    inputStream = inputStream,
+                                    onSerializationError = {
+                                        showError(
+                                            message = context.getString(R.string.control_manage_import_failed_to_parse) + "\n" +
+                                                    it.getMessageOrToString()
+                                        )
+                                    },
+                                    catchedError =  {
+                                        showError(message = it.getMessageOrToString())
+                                    }
+                                )
+                            }
+                            ControlManager.refresh()
+                        }
+                    )
+                )
+            }
         )
         IconTextButton(
             onClick = onCreate,
@@ -611,29 +575,10 @@ private fun ControlLayoutItem(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     MarqueeText(
-                        modifier = Modifier.weight(0.4f, fill = false),
+                        modifier = Modifier.weight(1f, fill = false),
                         text = if (data.isSupport) info.name.translate(locale) else data.file.name,
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    if (data.isSupport) {
-                        //作者名称
-                        val authorName = info.author.translate(locale)
-                        if (!authorName.isEmptyOrBlank()) {
-                            VerticalDivider(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .padding(vertical = 4.dp),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
-                            )
-                            MarqueeText(
-                                modifier = Modifier
-                                    .weight(0.6f, fill = false)
-                                    .alpha(0.7f),
-                                text = authorName,
-                                style = MaterialTheme.typography.labelSmall
-                            )
-                        }
-                    }
                 }
 
                 if (data.isSupport) {

@@ -1,8 +1,9 @@
 package com.movtery.zalithlauncher.ui.screens.content.versions.elements
 
-import com.movtery.zalithlauncher.utils.json.parseToJson
+import com.movtery.zalithlauncher.game.version.mod.meta.PackMcMeta
+import com.movtery.zalithlauncher.utils.GSON
 import com.movtery.zalithlauncher.utils.logging.Logger.lWarning
-import com.movtery.zalithlauncher.utils.string.StringUtils.Companion.stripColorCodes
+import com.movtery.zalithlauncher.utils.string.stripColorCodes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.apache.commons.io.FileUtils
@@ -45,8 +46,8 @@ fun List<ResourcePackInfo>.filterPacks(filter: ResourcePackFilter) = this.filter
 data class ResourcePackInfo(
     /** 资源包文件 */
     val file: File,
-    /** 提前计算好的文件大小 */
-    val fileSize: Long,
+    /** 提前计算好的文件大小（文件夹形式的资源包不计算文件大小） */
+    val fileSize: Long? = null,
     /** 清除颜色替换符后的文件名 */
     val rawName: String = file.name.stripColorCodes(),
     /** 显示名称（如果是压缩包类型的资源包，将被去掉扩展名） */
@@ -95,43 +96,52 @@ data class ResourcePackInfo(
 suspend fun parseResourcePack(file: File): ResourcePackInfo? = withContext(Dispatchers.IO) {
     runCatching {
         var isValid = false
-        val metaContent: String
-        val iconBytes: ByteArray?
+        var metaContent: String? = null
+        var iconBytes: ByteArray? = null
+        var fileSize: Long? = null
 
         if (file.isDirectory) { //文件夹形式的资源包
             //资源包元数据
-            val metaFile = File(file, "pack.mcmeta")
-            if (!metaFile.exists()) return@withContext null
-            metaContent = metaFile.readText()
+            File(file, "pack.mcmeta").takeIf { it.exists() }?.let { metaFile ->
+                metaContent = metaFile.readText()
+            }
             //尝试读取资源包的图标
-            val iconFile = File(file, "pack.png")
-            iconBytes = if (iconFile.exists()) iconFile.readBytes() else null
+            File(file, "pack.png").takeIf { it.exists() }?.let { iconFile ->
+                iconBytes = iconFile.readBytes()
+            }
         } else if (file.extension == "zip") { //压缩包形式的资源包
+            //性能、速度考虑，仅压缩包形式的资源包可以计算文件大小
+            fileSize = FileUtils.sizeOf(file)
+
             ZipFile(file).use { zip ->
                 //资源包元数据
-                val metaEntry = zip.getEntry("pack.mcmeta") ?: return@withContext null
-                metaContent = zip.getInputStream(metaEntry).bufferedReader().readText()
+                zip.getEntry("pack.mcmeta")?.let { metaEntry ->
+                    metaContent = zip.getInputStream(metaEntry).bufferedReader().readText()
+                }
                 //尝试读取资源包的图标
-                val iconEntry = zip.getEntry("pack.png")
-                iconBytes = iconEntry?.let { zip.getInputStream(it).readBytes() }
+                zip.getEntry("pack.png")?.let { iconEntry ->
+                    iconBytes = zip.getInputStream(iconEntry).readBytes()
+                }
             }
-        } else {
-            //其他格式的资源包，按照游戏的做法，直接忽略
-            return@withContext null
         }
 
-        val metaJson = metaContent.parseToJson()
-        val pack = metaJson.get("pack")?.also {
-            //这个pack必须存在，否则将不是有效的格式
+        val meta = metaContent?.let { content ->
+            runCatching {
+                GSON.fromJson(content, PackMcMeta::class.java)
+            }.onFailure {
+                lWarning("Failed to parse the resource package metadata: ${file.absolutePath}", it)
+            }.getOrNull()
+        }?.also {
+            //解析成功，则代表其是一个有效的格式
             isValid = true
-        }?.asJsonObject
+        }
 
         ResourcePackInfo(
             file = file,
-            fileSize = FileUtils.sizeOf(file),
+            fileSize = fileSize,
             isValid = isValid,
-            description = pack?.get("description")?.asString,
-            packFormat = pack?.get("pack_format")?.asInt,
+            description = meta?.pack?.description?.toPlainText(),
+            packFormat = meta?.pack?.packFormat,
             icon = iconBytes
         )
     }.onFailure {

@@ -10,8 +10,8 @@ import com.movtery.zalithlauncher.utils.file.ensureParentDirectory
 import com.movtery.zalithlauncher.utils.logging.Logger.lError
 import com.movtery.zalithlauncher.utils.logging.Logger.lWarning
 import com.movtery.zalithlauncher.utils.math.findNearestPositive
-import com.movtery.zalithlauncher.utils.string.StringUtils.Companion.extractUntilCharacter
 import com.movtery.zalithlauncher.utils.string.compareVersion
+import com.movtery.zalithlauncher.utils.string.extractUntilCharacter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
@@ -84,7 +84,8 @@ object RuntimesManager {
                     } else {
                         versionParts.first().toIntOrNull() ?: 0
                     }
-                    Runtime(name, javaVersion, osArch, majorVersion, Jre.entries.any { it.jreName == name })
+                    val isJDK = runtimeDir.child("bin/javac").exists()
+                    Runtime(name, javaVersion, osArch, majorVersion, Jre.entries.any { it.jreName == name }, isJDK)
                 } else {
                     Runtime(name)
                 }
@@ -175,6 +176,7 @@ object RuntimesManager {
         if (!dest.exists() || forceReload(name).versionString == null) {
             throw RuntimeException("Selected runtime is broken!")
         }
+
         return dest
     }
 

@@ -85,7 +85,7 @@ import com.movtery.zalithlauncher.game.account.isSkinChangeAllowed
 import com.movtery.zalithlauncher.game.account.wardrobe.SkinModelType
 import com.movtery.zalithlauncher.game.account.yggdrasil.PlayerProfile
 import com.movtery.zalithlauncher.info.InfoDistributor
-import com.movtery.zalithlauncher.path.UrlManager
+import com.movtery.zalithlauncher.path.URL_MINECRAFT_PURCHASE
 import com.movtery.zalithlauncher.ui.components.IconTextButton
 import com.movtery.zalithlauncher.ui.components.MarqueeText
 import com.movtery.zalithlauncher.ui.components.SimpleAlertDialog
@@ -181,8 +181,6 @@ sealed interface AccountSkinOperation {
     data class SaveSkin(val uri: Uri): AccountSkinOperation
     /** 选择皮肤模型，便于保存皮肤时，顺便将模型类型写入账号文件 */
     data class SelectSkinModel(val uri: Uri): AccountSkinOperation
-    /** 警告皮肤模型的一些注意事项 */
-    data object AlertModel: AccountSkinOperation
     /** 警告用户是否真的想重置皮肤 */
     data object PreResetSkin: AccountSkinOperation
     /** 重置皮肤（清除皮肤并刷新账号皮肤模型为""） */
@@ -511,7 +509,7 @@ fun MicrosoftLoginTipDialog(
             FlowRow {
                 IconTextButton(
                     onClick = {
-                        openLink(UrlManager.URL_MINECRAFT_PURCHASE)
+                        openLink(URL_MINECRAFT_PURCHASE)
                     },
                     imageVector = Icons.Outlined.Link,
                     contentDescription = null,
@@ -602,7 +600,7 @@ fun LocalLoginDialog(
             ) {
                 IconTextButton(
                     onClick = {
-                        openLink(UrlManager.URL_MINECRAFT_PURCHASE)
+                        openLink(URL_MINECRAFT_PURCHASE)
                     },
                     imageVector = Icons.Outlined.Link,
                     contentDescription = null,

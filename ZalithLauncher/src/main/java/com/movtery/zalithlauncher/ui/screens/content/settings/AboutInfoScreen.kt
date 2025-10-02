@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Copyright
@@ -26,7 +25,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,13 +50,17 @@ import com.movtery.zalithlauncher.game.plugin.appCacheIcon
 import com.movtery.zalithlauncher.info.InfoDistributor
 import com.movtery.zalithlauncher.library.LibraryInfo
 import com.movtery.zalithlauncher.library.libraryData
-import com.movtery.zalithlauncher.path.UrlManager
+import com.movtery.zalithlauncher.path.URL_COMMUNITY
+import com.movtery.zalithlauncher.path.URL_MCMOD
+import com.movtery.zalithlauncher.path.URL_PROJECT
+import com.movtery.zalithlauncher.path.URL_SUPPORT
+import com.movtery.zalithlauncher.path.URL_WEBLATE
 import com.movtery.zalithlauncher.ui.base.BaseScreen
+import com.movtery.zalithlauncher.ui.components.AnimatedLazyColumn
 import com.movtery.zalithlauncher.ui.components.itemLayoutColor
 import com.movtery.zalithlauncher.ui.screens.NestedNavKey
 import com.movtery.zalithlauncher.ui.screens.NormalNavKey
 import com.movtery.zalithlauncher.ui.screens.content.settings.layouts.SettingsBackground
-import com.movtery.zalithlauncher.utils.animation.swapAnimateDpAsState
 
 @Composable
 fun AboutInfoScreen(
@@ -72,16 +74,12 @@ fun AboutInfoScreen(
         Triple(key, mainScreenKey, false),
         Triple(NormalNavKey.Settings.AboutInfo, settingsScreenKey, false)
     ) { isVisible ->
-        LazyColumn(
+        AnimatedLazyColumn(
             modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            isVisible = isVisible,
             contentPadding = PaddingValues(all = 12.dp)
-        ) {
-            item {
-                val yOffset by swapAnimateDpAsState(
-                    targetValue = (-40).dp,
-                    swapIn = isVisible
-                )
+        ) { scope ->
+            animatedItem(scope) { yOffset ->
                 ChunkLayout(
                     modifier = Modifier.offset { IntOffset(x = 0, y = yOffset.roundToPx()) },
                     title = stringResource(R.string.about_launcher_title)
@@ -92,7 +90,7 @@ fun AboutInfoScreen(
                             title = InfoDistributor.LAUNCHER_NAME,
                             text = stringResource(R.string.about_launcher_version, BuildConfig.VERSION_NAME),
                             buttonText = stringResource(R.string.about_launcher_project_link),
-                            onButtonClick = { openLink(UrlManager.URL_PROJECT) }
+                            onButtonClick = { openLink(URL_PROJECT) }
                         )
 
                         ButtonIconItem(
@@ -100,18 +98,13 @@ fun AboutInfoScreen(
                             title = stringResource(R.string.about_launcher_author_movtery_title),
                             text = stringResource(R.string.about_launcher_author_movtery_text, InfoDistributor.LAUNCHER_NAME),
                             buttonText = stringResource(R.string.about_sponsor),
-                            onButtonClick = { openLink(UrlManager.URL_SUPPORT) }
+                            onButtonClick = { openLink(URL_SUPPORT) }
                         )
                     }
                 }
             }
 
-            item {
-                val yOffset by swapAnimateDpAsState(
-                    targetValue = (-40).dp,
-                    swapIn = isVisible,
-                    delayMillis = 50
-                )
+            animatedItem(scope) { yOffset ->
                 ChunkLayout(
                     modifier = Modifier.offset { IntOffset(x = 0, y = yOffset.roundToPx()) },
                     title = stringResource(R.string.about_acknowledgements_title)
@@ -142,7 +135,7 @@ fun AboutInfoScreen(
                             icon = painterResource(R.drawable.img_platform_mcmod),
                             title = stringResource(R.string.about_acknowledgements_mcmod),
                             text = stringResource(R.string.about_acknowledgements_mcmod_text, InfoDistributor.LAUNCHER_SHORT_NAME),
-                            openLink = { openLink(UrlManager.URL_MCMOD) }
+                            openLink = { openLink(URL_MCMOD) }
                         )
                         LinkIconItem(
                             icon = painterResource(R.drawable.img_launcher_pcl2),
@@ -157,17 +150,25 @@ fun AboutInfoScreen(
                             openLicense = { openLicense(R.raw.lgpl_3_license) },
                             openLink = { openLink("https://github.com/PojavLauncherTeam/PojavLauncher") }
                         )
+                        LinkIconItem(
+                            icon = painterResource(R.drawable.ic_github),
+                            title = stringResource(R.string.about_acknowledgements_github_community),
+                            text = stringResource(R.string.about_acknowledgements_github_community_text),
+                            openLink = { openLink(URL_COMMUNITY) },
+                            useImage = false
+                        )
+                        LinkIconItem(
+                            icon = painterResource(R.drawable.img_weblate),
+                            title = stringResource(R.string.about_acknowledgements_weblate_community),
+                            text = stringResource(R.string.about_acknowledgements_weblate_community_text),
+                            openLink = { openLink(URL_WEBLATE) }
+                        )
                     }
                 }
             }
 
-            item {
-                val yOffset by swapAnimateDpAsState(
-                    targetValue = (-40).dp,
-                    swapIn = isVisible,
-                    delayMillis = 100
-                )
-                //额外依赖库板块
+            //额外依赖库板块
+            animatedItem(scope) { yOffset ->
                 ChunkLayout(
                     modifier = Modifier.offset { IntOffset(x = 0, y = yOffset.roundToPx()) },
                     title = stringResource(R.string.about_library_title)
@@ -180,14 +181,9 @@ fun AboutInfoScreen(
                 }
             }
 
+            //已加载插件板块
             PluginLoader.allPlugins.takeIf { it.isNotEmpty() }?.let { allPlugins ->
-                item {
-                    val yOffset by swapAnimateDpAsState(
-                        targetValue = (-40).dp,
-                        swapIn = isVisible,
-                        delayMillis = 150
-                    )
-                    //已加载插件板块
+                animatedItem(scope) { yOffset ->
                     ChunkLayout(
                         modifier = Modifier.offset { IntOffset(x = 0, y = yOffset.roundToPx()) },
                         title = stringResource(R.string.about_plugin_title)
@@ -249,6 +245,7 @@ private fun LinkIconItem(
     openLink: (() -> Unit)? = null,
     color: Color = itemLayoutColor(),
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    useImage: Boolean = true
 ) {
     Surface(
         modifier = modifier,
@@ -265,14 +262,23 @@ private fun LinkIconItem(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Image(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(shape = RoundedCornerShape(6.dp)),
-                painter = icon,
-                contentDescription = null,
-                contentScale = ContentScale.Fit
-            )
+            val iconModifier = Modifier
+                .size(34.dp)
+                .clip(shape = RoundedCornerShape(6.dp))
+            if (useImage) {
+                Image(
+                    modifier = iconModifier,
+                    painter = icon,
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit
+                )
+            } else {
+                Icon(
+                    modifier = iconModifier,
+                    painter = icon,
+                    contentDescription = null
+                )
+            }
 
             Column(
                 modifier = Modifier.weight(1f)
